@@ -1,9 +1,16 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"time"
 )
 
 func main() {
@@ -19,17 +26,63 @@ func main() {
 		log.Fatal("FIREBLOCKS_API_KEY not set")
 	}
 
-	fireblocksSecretKey, ok := os.LookupEnv("FIREBLOCKS_SECRET_KEY")
-	if !ok || fireblocksSecretKey == "" {
-		log.Fatal("FIREBLOCKS_SECRET_KEY not set")
+	fireblocksSecretKeyPath, ok := os.LookupEnv("FIREBLOCKS_SECRET_KEY_PATH")
+	if !ok || fireblocksSecretKeyPath == "" {
+		log.Fatal("FIREBLOCKS_SECRET_KEY_PATH not set")
+	}
+	fireblocksPrivateKeyBytes, err := os.ReadFile(fireblocksSecretKeyPath)
+	if err != nil {
+		log.Fatalf("error reading private key from %s: %v", fireblocksSecretKeyPath, err)
+	}
+	fireblocksPrivateKey, err := jwt.ParseRSAPrivateKeyFromPEM(fireblocksPrivateKeyBytes)
+	if err != nil {
+		log.Fatalf("error parsing RSA private key: %v", err)
 	}
 
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+		uri := "/v1/vault/accounts_paged"
+		nonce := uuid.New().String()
+		now := time.Now().Unix()
+		h := sha256.New()
+		h.Write(nil)
+		hashed := h.Sum(nil)
+
+		claims := jwt.MapClaims{
+			"uri":      uri,
+			"nonce":    nonce,
+			"iat":      now,
+			"exp":      now + 30,
+			"sub":      fireblocksAPIKey,
+			"bodyHash": hex.EncodeToString(hashed),
+		}
+
+		token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+		tokenString, err := token.SignedString(fireblocksPrivateKey)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to sign token: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		fullURL := fireblocksBaseURL + uri
+		req, _ := http.NewRequest("GET", fullURL, nil)
+		req.Header.Set("X-API-Key", fireblocksAPIKey)
+		req.Header.Set("Authorization", "Bearer "+tokenString)
+
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("API call failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"message": "OK"}`))
+		w.WriteHeader(resp.StatusCode)
+		w.Write(body)
 	})
 
 	log.Printf("Listening on port %s", port)

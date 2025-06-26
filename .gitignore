@@ -23,3 +23,5 @@ go.work.sum
 
 # Editor/IDE
 .idea/
+
+fireblocks_secret.key
