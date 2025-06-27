@@ -30,6 +30,29 @@ func NewClient(baseURL string, apiKey string, privateKey *rsa.PrivateKey) *Clien
 	}
 }
 
+func (c *Client) CreateVaultAccount(req CreateVaultAccountRequest) (*CreateVaultAccountResponse, int, error) {
+	respBytes, statusCode, err := c.makeAPIRequest("POST", "/v1/vault/accounts", req)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if statusCode == http.StatusOK {
+		var response CreateVaultAccountResponse
+		if err = json.Unmarshal(respBytes, &response); err != nil {
+			return nil, statusCode, fmt.Errorf("failed to parse response: %w", err)
+		}
+		return &response, statusCode, nil
+	}
+
+	var fbError ErrorResponse
+	if err = json.Unmarshal(respBytes, &fbError); err == nil {
+		return nil, statusCode, fbError
+	}
+
+	// fallback for unexpected error format
+	return nil, statusCode, fmt.Errorf("unexpected API response: %s", string(respBytes))
+}
+
 // GetAccountsPaged is used for testing only
 func (c *Client) GetAccountsPaged() ([]byte, error) {
 	path := "/v1/vault/accounts_paged"

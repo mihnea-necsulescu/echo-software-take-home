@@ -2,6 +2,7 @@ package main
 
 import (
 	"firego-wallet-service/internal/fireblocks"
+	"firego-wallet-service/internal/handlers"
 	"github.com/golang-jwt/jwt/v5"
 	"log"
 	"net/http"
@@ -36,14 +37,18 @@ func main() {
 
 	mux := http.NewServeMux()
 
+	fireblocksClient := fireblocks.NewClient(fireblocksBaseURL, fireblocksAPIKey, fireblocksPrivateKey)
+	walletHandler := handlers.NewWalletHandler(fireblocksClient)
+
 	mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-		client := fireblocks.NewClient(fireblocksBaseURL, fireblocksAPIKey, fireblocksPrivateKey)
-		resp, _ := client.GetAccountsPaged()
+		resp, _ := fireblocksClient.GetAccountsPaged()
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(200)
 		w.Write(resp)
 	})
+
+	mux.HandleFunc("/wallets", walletHandler.CreateWallet)
 
 	log.Printf("Listening on port %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
