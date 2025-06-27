@@ -1,16 +1,11 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
+	"firego-wallet-service/internal/fireblocks"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
-	"io"
 	"log"
 	"net/http"
 	"os"
-	"time"
 )
 
 func main() {
@@ -42,47 +37,12 @@ func main() {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-		uri := "/v1/vault/accounts_paged"
-		nonce := uuid.New().String()
-		now := time.Now().Unix()
-		h := sha256.New()
-		h.Write(nil)
-		hashed := h.Sum(nil)
-
-		claims := jwt.MapClaims{
-			"uri":      uri,
-			"nonce":    nonce,
-			"iat":      now,
-			"exp":      now + 30,
-			"sub":      fireblocksAPIKey,
-			"bodyHash": hex.EncodeToString(hashed),
-		}
-
-		token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-		tokenString, err := token.SignedString(fireblocksPrivateKey)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("failed to sign token: %v", err), http.StatusInternalServerError)
-			return
-		}
-
-		fullURL := fireblocksBaseURL + uri
-		req, _ := http.NewRequest("GET", fullURL, nil)
-		req.Header.Set("X-API-Key", fireblocksAPIKey)
-		req.Header.Set("Authorization", "Bearer "+tokenString)
-
-		client := &http.Client{Timeout: 30 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("API call failed: %v", err), http.StatusInternalServerError)
-			return
-		}
-		defer resp.Body.Close()
-
-		body, _ := io.ReadAll(resp.Body)
+		client := fireblocks.NewClient(fireblocksBaseURL, fireblocksAPIKey, fireblocksPrivateKey)
+		resp, _ := client.GetAccountsPaged()
 
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(resp.StatusCode)
-		w.Write(body)
+		w.WriteHeader(200)
+		w.Write(resp)
 	})
 
 	log.Printf("Listening on port %s", port)
