@@ -94,9 +94,7 @@ func TestCreateVaultAccount(t *testing.T) {
 			assert.NoError(t, err)
 
 			client := NewClient(server.URL, "test-api-key", testPrivateKey)
-			req := CreateVaultAccountRequest{Name: "Test"}
-
-			resp, statusCode, err := client.CreateVaultAccount(req)
+			resp, statusCode, err := client.CreateVaultAccount(CreateVaultAccountRequest{Name: "Test"})
 
 			tt.assert(t, resp, statusCode, err)
 		})

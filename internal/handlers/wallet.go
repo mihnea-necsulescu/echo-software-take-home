@@ -7,11 +7,15 @@ import (
 	"net/http"
 )
 
-type WalletHandler struct {
-	fireblocksClient *fireblocks.Client
+type FireblocksClient interface {
+	CreateVaultAccount(req fireblocks.CreateVaultAccountRequest) (*fireblocks.CreateVaultAccountResponse, int, error)
 }
 
-func NewWalletHandler(fireblocksClient *fireblocks.Client) *WalletHandler {
+type WalletHandler struct {
+	fireblocksClient FireblocksClient
+}
+
+func NewWalletHandler(fireblocksClient FireblocksClient) *WalletHandler {
 	return &WalletHandler{
 		fireblocksClient: fireblocksClient,
 	}
