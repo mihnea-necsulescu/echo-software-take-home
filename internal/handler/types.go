@@ -20,3 +20,10 @@ type GetWalletBalanceResponse struct {
 	LockedAmount string `json:"lockedAmount"`
 	Staked       string `json:"staked"`
 }
+
+type GetDepositAddressResponse struct {
+	AssetID       string `json:"assetId"`
+	Address       string `json:"address"`
+	AddressFormat string `json:"addressFormat"`
+	Type          string `json:"type"`
+}

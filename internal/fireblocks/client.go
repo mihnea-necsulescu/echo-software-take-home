@@ -78,6 +78,30 @@ func (c *Client) GetVaultAccountAssetBalance(vaultAccountID, assetID string) (*G
 	return nil, statusCode, fmt.Errorf("unexpected API response: %s", string(respBytes))
 }
 
+func (c *Client) GetVaultAccountAssetAddresses(vaultAccountID, assetID string) (*GetVaultAccountAssetAddressesResponse, int, error) {
+	path := fmt.Sprintf("/v1/vault/accounts/%s/%s/addresses_paginated", vaultAccountID, assetID)
+
+	respBytes, statusCode, err := c.makeAPIRequest("GET", path, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if statusCode == http.StatusOK {
+		var response GetVaultAccountAssetAddressesResponse
+		if err = json.Unmarshal(respBytes, &response); err != nil {
+			return nil, statusCode, fmt.Errorf("failed to parse response: %w", err)
+		}
+		return &response, statusCode, nil
+	}
+
+	var fbError ErrorResponse
+	if err = json.Unmarshal(respBytes, &fbError); err == nil {
+		return nil, statusCode, fbError
+	}
+
+	return nil, statusCode, fmt.Errorf("unexpected API response: %s", string(respBytes))
+}
+
 // GetAccountsPaged is used for testing only
 func (c *Client) GetAccountsPaged() ([]byte, error) {
 	path := "/v1/vault/accounts_paged"

@@ -31,3 +31,20 @@ type GetVaultAccountAssetBalanceResponse struct {
 	Staked       string `json:"staked"`
 	BlockHeight  string `json:"blockHeight"`
 }
+
+type GetVaultAccountAssetAddressesResponse struct {
+	Addresses []VaultAccountAddress `json:"addresses"`
+}
+
+type VaultAccountAddress struct {
+	AssetID           string `json:"assetId"`
+	Address           string `json:"address"`
+	Description       string `json:"description"`
+	Tag               string `json:"tag"`
+	Type              string `json:"type"`
+	AddressFormat     string `json:"addressFormat"`
+	LegacyAddress     string `json:"legacyAddress"`
+	EnterpriseAddress string `json:"enterpriseAddress"`
+	Bip44AddressIndex int    `json:"bip44AddressIndex"`
+	UserDefined       bool   `json:"userDefined"`
+}
