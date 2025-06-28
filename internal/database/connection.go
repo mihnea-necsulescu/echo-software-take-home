@@ -1,6 +1,7 @@
 package database
 
 import (
+	"firego-wallet-service/internal/model"
 	"fmt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -23,5 +24,13 @@ func Connect(host, port, dbname, user, password, sslmode string) (*gorm.DB, erro
 	}
 
 	log.Println("Successfully connected to database")
+
+	log.Println("Running migrations...")
+	if err = db.AutoMigrate(&model.Wallet{}); err != nil {
+		return nil, fmt.Errorf("failed to run migrations: %w", err)
+	}
+
+	log.Println("Successfully migrated database")
+
 	return db, nil
 }
