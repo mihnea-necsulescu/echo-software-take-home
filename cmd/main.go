@@ -1,8 +1,9 @@
 package main
 
 import (
+	"firego-wallet-service/internal/database"
 	"firego-wallet-service/internal/fireblocks"
-	"firego-wallet-service/internal/handlers"
+	"firego-wallet-service/internal/handler"
 	"github.com/golang-jwt/jwt/v5"
 	"log"
 	"net/http"
@@ -35,10 +36,30 @@ func main() {
 		log.Fatalf("error parsing RSA private key: %v", err)
 	}
 
+	dbHost := getEnv("DB_HOST", "localhost")
+	dbPort := getEnv("DB_PORT", "5432")
+	dbName := getEnv("DB_NAME", "firego_wallet")
+	dbSSLMode := getEnv("DB_SSL_MODE", "disable")
+
+	dbUser, ok := os.LookupEnv("DB_USER")
+	if !ok || dbUser == "" {
+		log.Fatal("DB_USER environment variable is required")
+	}
+
+	dbPassword, ok := os.LookupEnv("DB_PASSWORD")
+	if !ok || dbPassword == "" {
+		log.Fatal("DB_PASSWORD environment variable is required")
+	}
+
+	_, err = database.Connect(dbHost, dbPort, dbName, dbUser, dbPassword, dbSSLMode)
+	if err != nil {
+		log.Fatalf("failed to connect to database: %v", err)
+	}
+
 	mux := http.NewServeMux()
 
 	fireblocksClient := fireblocks.NewClient(fireblocksBaseURL, fireblocksAPIKey, fireblocksPrivateKey)
-	walletHandler := handlers.NewWalletHandler(fireblocksClient)
+	walletHandler := handler.NewWalletHandler(fireblocksClient)
 
 	mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 		resp, _ := fireblocksClient.GetAccountsPaged()

@@ -1,4 +1,4 @@
-package handlers
+package handler
 
 type CreateWalletRequest struct {
 	Name string `json:"name"`
