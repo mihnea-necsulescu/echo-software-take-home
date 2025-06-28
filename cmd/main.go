@@ -4,6 +4,7 @@ import (
 	"firego-wallet-service/internal/database"
 	"firego-wallet-service/internal/fireblocks"
 	"firego-wallet-service/internal/handler"
+	"firego-wallet-service/internal/repository"
 	"github.com/golang-jwt/jwt/v5"
 	"log"
 	"net/http"
@@ -51,7 +52,7 @@ func main() {
 		log.Fatal("DB_PASSWORD environment variable is required")
 	}
 
-	_, err = database.Connect(dbHost, dbPort, dbName, dbUser, dbPassword, dbSSLMode)
+	db, err := database.Connect(dbHost, dbPort, dbName, dbUser, dbPassword, dbSSLMode)
 	if err != nil {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
@@ -59,7 +60,8 @@ func main() {
 	mux := http.NewServeMux()
 
 	fireblocksClient := fireblocks.NewClient(fireblocksBaseURL, fireblocksAPIKey, fireblocksPrivateKey)
-	walletHandler := handler.NewWalletHandler(fireblocksClient)
+	walletRepo := repository.NewWalletRepository(db)
+	walletHandler := handler.NewWalletHandler(walletRepo, fireblocksClient)
 
 	mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 		resp, _ := fireblocksClient.GetAccountsPaged()

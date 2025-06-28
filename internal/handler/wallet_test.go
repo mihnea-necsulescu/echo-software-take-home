@@ -4,11 +4,33 @@ import (
 	"bytes"
 	"encoding/json"
 	"firego-wallet-service/internal/fireblocks"
+	"firego-wallet-service/internal/model"
 	"github.com/stretchr/testify/assert"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
+
+type MockWalletRepository struct {
+	CreateError   error
+	CreatedWallet *model.Wallet
+}
+
+func (m *MockWalletRepository) Create(wallet *model.Wallet) error {
+	if m.CreateError != nil {
+		return m.CreateError
+	}
+
+	wallet.ID = "test-wallet-id-123"
+	now := time.Now()
+	wallet.CreatedAt = now
+	wallet.UpdatedAt = now
+
+	m.CreatedWallet = wallet
+
+	return nil
+}
 
 type MockFireblocksClient struct {
 	Response   *fireblocks.CreateVaultAccountResponse
@@ -23,14 +45,15 @@ func (m *MockFireblocksClient) CreateVaultAccount(_ fireblocks.CreateVaultAccoun
 func TestCreateWallet(t *testing.T) {
 	tests := []struct {
 		name      string
-		mockSetup func() FireblocksClient
+		mockSetup func() (WalletRepository, FireblocksClient)
 		request   CreateWalletRequest
 		assert    func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
 			name: "success",
-			mockSetup: func() FireblocksClient {
-				return &MockFireblocksClient{
+			mockSetup: func() (WalletRepository, FireblocksClient) {
+				mockRepo := &MockWalletRepository{CreateError: nil}
+				mockFireblocksClient := &MockFireblocksClient{
 					Response: &fireblocks.CreateVaultAccountResponse{
 						ID:   "123",
 						Name: "Test",
@@ -38,6 +61,7 @@ func TestCreateWallet(t *testing.T) {
 					StatusCode: http.StatusCreated,
 					Error:      nil,
 				}
+				return mockRepo, mockFireblocksClient
 			},
 			request: CreateWalletRequest{Name: "Test"},
 			assert: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -48,19 +72,20 @@ func TestCreateWallet(t *testing.T) {
 				err := json.NewDecoder(recorder.Body).Decode(&response)
 				assert.NoError(t, err)
 
-				assert.Equal(t, "todo", response.ID) // todo
+				assert.Equal(t, "test-wallet-id-123", response.ID)
 				assert.Equal(t, "Test", response.Name)
 				assert.Equal(t, "123", response.VaultAccountID)
 			},
 		},
 		{
 			name: "fireblocks_error_unauthorized",
-			mockSetup: func() FireblocksClient {
-				return &MockFireblocksClient{
+			mockSetup: func() (WalletRepository, FireblocksClient) {
+				mockFireblocksClient := &MockFireblocksClient{
 					Response:   nil,
 					StatusCode: http.StatusUnauthorized,
 					Error:      fireblocks.ErrorResponse{Code: -3, Message: "Unauthorized"},
 				}
+				return nil, mockFireblocksClient
 			},
 			request: CreateWalletRequest{Name: "Test"},
 			assert: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -70,12 +95,13 @@ func TestCreateWallet(t *testing.T) {
 		},
 		{
 			name: "fireblocks_server_error",
-			mockSetup: func() FireblocksClient {
-				return &MockFireblocksClient{
+			mockSetup: func() (WalletRepository, FireblocksClient) {
+				mockFireblocksClient := &MockFireblocksClient{
 					Response:   nil,
 					StatusCode: http.StatusInternalServerError,
 					Error:      fireblocks.ErrorResponse{Code: 1003, Message: "Create vault account failed"},
 				}
+				return nil, mockFireblocksClient
 			},
 			request: CreateWalletRequest{Name: "Test"},
 			assert: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -85,8 +111,8 @@ func TestCreateWallet(t *testing.T) {
 		},
 		{
 			name: "invalid_request_empty_name",
-			mockSetup: func() FireblocksClient {
-				return &MockFireblocksClient{}
+			mockSetup: func() (WalletRepository, FireblocksClient) {
+				return nil, nil
 			},
 			request: CreateWalletRequest{Name: ""},
 			assert: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -94,12 +120,32 @@ func TestCreateWallet(t *testing.T) {
 				assert.Contains(t, recorder.Body.String(), "Wallet name is required")
 			},
 		},
+		{
+			name: "database_error",
+			mockSetup: func() (WalletRepository, FireblocksClient) {
+				mockRepo := &MockWalletRepository{CreateError: assert.AnError}
+				mockFireblocksClient := &MockFireblocksClient{
+					Response: &fireblocks.CreateVaultAccountResponse{
+						ID:   "123",
+						Name: "Test",
+					},
+					StatusCode: http.StatusCreated,
+					Error:      nil,
+				}
+				return mockRepo, mockFireblocksClient
+			},
+			request: CreateWalletRequest{Name: "Test"},
+			assert: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusInternalServerError, recorder.Code)
+				assert.Contains(t, recorder.Body.String(), "Failed to create wallet")
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := tt.mockSetup()
-			handler := NewWalletHandler(mockClient)
+			mockRepo, mockClient := tt.mockSetup()
+			handler := NewWalletHandler(mockRepo, mockClient)
 
 			reqBody, err := json.Marshal(tt.request)
 			assert.NoError(t, err)
