@@ -18,3 +18,12 @@ func NewWalletRepository(db *gorm.DB) *walletRepository {
 func (r *walletRepository) Create(wallet *model.Wallet) error {
 	return r.db.Create(wallet).Error
 }
+
+func (r *walletRepository) GetByID(id string) (*model.Wallet, error) {
+	var wallet model.Wallet
+	err := r.db.Where("id = ?", id).First(&wallet).Error
+	if err != nil {
+		return nil, err
+	}
+	return &wallet, nil
+}

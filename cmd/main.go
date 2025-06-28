@@ -71,7 +71,8 @@ func main() {
 		w.Write(resp)
 	})
 
-	mux.HandleFunc("/wallets", walletHandler.CreateWallet)
+	mux.HandleFunc("POST /wallets", walletHandler.CreateWallet)
+	mux.HandleFunc("GET /wallets/{walletId}/assets/{assetId}/balance", walletHandler.GetWalletBalance)
 
 	log.Printf("Listening on port %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
