@@ -50,7 +50,7 @@ func TestCreateWallet(t *testing.T) {
 
 				assert.Equal(t, "todo", response.ID) // todo
 				assert.Equal(t, "Test", response.Name)
-				assert.Equal(t, "123", response.FireblocksVaultAccountID)
+				assert.Equal(t, "123", response.VaultAccountID)
 			},
 		},
 		{

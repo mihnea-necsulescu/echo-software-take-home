@@ -55,9 +55,9 @@ func (h *WalletHandler) CreateWallet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := CreateWalletResponse{
-		ID:                       "todo", // Will be from database later
-		Name:                     fbResp.Name,
-		FireblocksVaultAccountID: fbResp.ID,
+		ID:             "todo", // Will be from database later
+		Name:           fbResp.Name,
+		VaultAccountID: fbResp.ID,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

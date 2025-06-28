@@ -5,7 +5,7 @@ type CreateWalletRequest struct {
 }
 
 type CreateWalletResponse struct {
-	ID                       string `json:"id"`
-	Name                     string `json:"name"`
-	FireblocksVaultAccountID string `json:"fireblocksVaultAccountID"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	VaultAccountID string `json:"vaultAccountID"`
 }
