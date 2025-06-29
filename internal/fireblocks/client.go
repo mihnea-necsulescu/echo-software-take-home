@@ -36,21 +36,7 @@ func (c *Client) CreateVaultAccount(req CreateVaultAccountRequest) (*CreateVault
 		return nil, 0, err
 	}
 
-	if statusCode == http.StatusOK {
-		var response CreateVaultAccountResponse
-		if err = json.Unmarshal(respBytes, &response); err != nil {
-			return nil, statusCode, fmt.Errorf("failed to parse response: %w", err)
-		}
-		return &response, statusCode, nil
-	}
-
-	var fbError ErrorResponse
-	if err = json.Unmarshal(respBytes, &fbError); err == nil {
-		return nil, statusCode, fbError
-	}
-
-	// fallback for unexpected error format
-	return nil, statusCode, fmt.Errorf("unexpected API response: %s", string(respBytes))
+	return handleAPIResponse[CreateVaultAccountResponse](respBytes, statusCode)
 }
 
 func (c *Client) GetVaultAccountAssetBalance(vaultAccountID, assetID string) (*GetVaultAccountAssetBalanceResponse, int, error) {
@@ -61,21 +47,7 @@ func (c *Client) GetVaultAccountAssetBalance(vaultAccountID, assetID string) (*G
 		return nil, 0, err
 	}
 
-	if statusCode == http.StatusOK {
-		var response GetVaultAccountAssetBalanceResponse
-		if err = json.Unmarshal(respBytes, &response); err != nil {
-			return nil, statusCode, fmt.Errorf("failed to parse response: %w", err)
-		}
-		return &response, statusCode, nil
-	}
-
-	var fbError ErrorResponse
-	if err = json.Unmarshal(respBytes, &fbError); err == nil {
-		return nil, statusCode, fbError
-	}
-
-	// fallback for unexpected error format
-	return nil, statusCode, fmt.Errorf("unexpected API response: %s", string(respBytes))
+	return handleAPIResponse[GetVaultAccountAssetBalanceResponse](respBytes, statusCode)
 }
 
 func (c *Client) GetVaultAccountAssetAddresses(vaultAccountID, assetID string) (*GetVaultAccountAssetAddressesResponse, int, error) {
@@ -86,20 +58,7 @@ func (c *Client) GetVaultAccountAssetAddresses(vaultAccountID, assetID string) (
 		return nil, 0, err
 	}
 
-	if statusCode == http.StatusOK {
-		var response GetVaultAccountAssetAddressesResponse
-		if err = json.Unmarshal(respBytes, &response); err != nil {
-			return nil, statusCode, fmt.Errorf("failed to parse response: %w", err)
-		}
-		return &response, statusCode, nil
-	}
-
-	var fbError ErrorResponse
-	if err = json.Unmarshal(respBytes, &fbError); err == nil {
-		return nil, statusCode, fbError
-	}
-
-	return nil, statusCode, fmt.Errorf("unexpected API response: %s", string(respBytes))
+	return handleAPIResponse[GetVaultAccountAssetAddressesResponse](respBytes, statusCode)
 }
 
 func (c *Client) CreateTransaction(req CreateTransactionRequest) (*CreateTransactionResponse, int, error) {
@@ -110,20 +69,7 @@ func (c *Client) CreateTransaction(req CreateTransactionRequest) (*CreateTransac
 		return nil, 0, err
 	}
 
-	if statusCode == http.StatusOK {
-		var response CreateTransactionResponse
-		if err = json.Unmarshal(respBytes, &response); err != nil {
-			return nil, statusCode, fmt.Errorf("failed to parse response: %w", err)
-		}
-		return &response, statusCode, nil
-	}
-
-	var fbError ErrorResponse
-	if err = json.Unmarshal(respBytes, &fbError); err == nil {
-		return nil, statusCode, fbError
-	}
-
-	return nil, statusCode, fmt.Errorf("unexpected API response: %s", string(respBytes))
+	return handleAPIResponse[CreateTransactionResponse](respBytes, statusCode)
 }
 
 func NewVaultTransferRequest(assetID, vaultAccountID, destinationAddress, amount, note string) CreateTransactionRequest {
@@ -219,4 +165,28 @@ func (c *Client) signJWT(uri string, bodyBytes []byte) (string, error) {
 	}
 
 	return tokenString, nil
+}
+
+// handleAPIResponse processes the Fireblocks API response, handling both success and error cases
+func handleAPIResponse[T any](respBytes []byte, statusCode int) (*T, int, error) {
+	if statusCode == http.StatusOK {
+		var response T
+		if err := json.Unmarshal(respBytes, &response); err != nil {
+			return nil, statusCode, fmt.Errorf("failed to parse response: %w", err)
+		}
+		return &response, statusCode, nil
+	}
+
+	return nil, statusCode, handleAPIError(respBytes, statusCode)
+}
+
+// handleAPIError processes error responses from the Fireblocks API
+func handleAPIError(respBytes []byte, statusCode int) error {
+	var fbError ErrorResponse
+	if err := json.Unmarshal(respBytes, &fbError); err == nil {
+		return fbError
+	}
+
+	// fallback for unexpected error format
+	return fmt.Errorf("unexpected API response: %s", string(respBytes))
 }
