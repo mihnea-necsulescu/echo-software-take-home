@@ -131,17 +131,17 @@ FireGo Wallet is a simple cryptocurrency wallet management service built in Go t
 - **Simple logging**: Basic log output is sufficient for our scope.
 - **Docker for Database Only**: Application runs natively while only PostgreSQL is containerized for simplified development. 
 - **Repository Layer Testing**: Given the minimal CRUD operations, unit tests were focused on the handler layer where business logic resides and on the Fireblocks client correctness.
-- **Missing Idempotency**: No idempotency key support for create/transfer operations, presenting risks for duplicate operations (acceptable for assignment scope)
+- **Missing Idempotency**: No idempotency key support for create/transfer operations, presenting risks for duplicate operations (acceptable for assignment scope).
 
 ### Concurrency Considerations
-- **HTTP Server Concurrency**: The standard `net/http` server handles concurrent requests automatically
-- **Single-Operation Endpoints**: Current endpoints perform sequential operations (DB lookup -> Fireblocks API) where concurrency wouldn't provide benefits
-- **Future Enhancements**: Concurrency would be valuable for operations outside our scope (e.g., bulk wallet creation)
+- **HTTP Server Concurrency**: The standard `net/http` server handles concurrent requests automatically.
+- **Single-Operation Endpoints**: Current endpoints perform sequential operations (DB lookup -> Fireblocks API) where concurrency wouldn't provide benefits.
+- **Future Enhancements**: Concurrency would be valuable for operations outside our scope (e.g., bulk wallet creation).
 
 ### Retry Limitations
-- **No Retry Logic**: The service performs no automatic retries for failed operations
-- **No Circuit Breaker**: No protection against cascading failures when Fireblocks API is degraded
-- **Timeout Handling**: Basic HTTP client timeouts (30s) but no timeout strategies per operation type
+- **No Retry Logic**: The service performs no automatic retries for failed operations.
+- **No Circuit Breaker**: No protection against cascading failures when Fireblocks API is degraded.
+- **Timeout Handling**: Basic HTTP client timeouts (30s) but no timeout strategies per operation type.
 
 ## Setup and Testing
 
