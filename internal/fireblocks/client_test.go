@@ -447,3 +447,204 @@ func TestGetVaultAccountAssetAddresses(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateTransaction(t *testing.T) {
+	tests := []struct {
+		name      string
+		request   CreateTransactionRequest
+		mockSetup func() *httptest.Server
+		assert    func(t *testing.T, resp *CreateTransactionResponse, statusCode int, err error)
+	}{
+		{
+			name: "success",
+			request: CreateTransactionRequest{
+				Operation: "TRANSFER",
+				AssetID:   "BTC_TEST",
+				Source: TransactionSource{
+					Type: "VAULT_ACCOUNT",
+					ID:   "123",
+				},
+				Destination: TransactionDestination{
+					Type: "ONE_TIME_ADDRESS",
+					OneTimeAddress: OneTimeAddress{
+						Address: "tb1qerzrlxcfu24davlur5sqmgzzgsal6wusda40er",
+					},
+				},
+				Amount: "0.0000001",
+				Note:   "Test transfer",
+			},
+			mockSetup: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					assert.Equal(t, http.MethodPost, r.Method)
+					assert.Equal(t, "/v1/transactions", r.URL.Path)
+					assert.NotEmpty(t, r.Header.Get("X-API-Key"))
+					assert.NotEmpty(t, r.Header.Get("Authorization"))
+					assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+					var receivedReq CreateTransactionRequest
+					err := json.NewDecoder(r.Body).Decode(&receivedReq)
+					assert.NoError(t, err)
+					assert.Equal(t, "TRANSFER", receivedReq.Operation)
+					assert.Equal(t, "BTC_TEST", receivedReq.AssetID)
+					assert.Equal(t, "123", receivedReq.Source.ID)
+					assert.Equal(t, "tb1qerzrlxcfu24davlur5sqmgzzgsal6wusda40er", receivedReq.Destination.OneTimeAddress.Address)
+
+					w.WriteHeader(http.StatusOK)
+					json.NewEncoder(w).Encode(CreateTransactionResponse{
+						ID:     "eff51bfd-8cec-4b77-b01e-b1aff84dcf49",
+						Status: "PENDING_AML_SCREENING",
+					})
+				}))
+			},
+			assert: func(t *testing.T, resp *CreateTransactionResponse, statusCode int, err error) {
+				assert.NoError(t, err)
+				assert.Equal(t, http.StatusOK, statusCode)
+				assert.NotNil(t, resp)
+				assert.Equal(t, "eff51bfd-8cec-4b77-b01e-b1aff84dcf49", resp.ID)
+				assert.Equal(t, "PENDING_AML_SCREENING", resp.Status)
+			},
+		},
+		{
+			name: "invalid_vault_account",
+			request: CreateTransactionRequest{
+				Operation: "TRANSFER",
+				AssetID:   "BTC_TEST",
+				Source: TransactionSource{
+					Type: "VAULT_ACCOUNT",
+					ID:   "invalid-vault",
+				},
+				Destination: TransactionDestination{
+					Type: "ONE_TIME_ADDRESS",
+					OneTimeAddress: OneTimeAddress{
+						Address: "tb1qerzrlxcfu24davlur5sqmgzzgsal6wusda40er",
+					},
+				},
+				Amount: "0.0000001",
+			},
+			mockSetup: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusBadRequest)
+					json.NewEncoder(w).Encode(ErrorResponse{Code: 11001, Message: "The Provided Vault Account ID is invalid: invalid-vault"})
+				}))
+			},
+			assert: func(t *testing.T, resp *CreateTransactionResponse, statusCode int, err error) {
+				assert.Error(t, err)
+				assert.Equal(t, http.StatusBadRequest, statusCode)
+				assert.Nil(t, resp)
+				assert.Contains(t, err.Error(), "The Provided Vault Account ID is invalid")
+
+				var fbErr ErrorResponse
+				assert.True(t, errors.As(err, &fbErr))
+				assert.Equal(t, 11001, fbErr.Code)
+			},
+		},
+		{
+			name: "fireblocks_unauthorized",
+			request: CreateTransactionRequest{
+				Operation: "TRANSFER",
+				AssetID:   "BTC_TEST",
+				Source: TransactionSource{
+					Type: "VAULT_ACCOUNT",
+					ID:   "123",
+				},
+				Destination: TransactionDestination{
+					Type: "ONE_TIME_ADDRESS",
+					OneTimeAddress: OneTimeAddress{
+						Address: "tb1qerzrlxcfu24davlur5sqmgzzgsal6wusda40er",
+					},
+				},
+				Amount: "0.0000001",
+			},
+			mockSetup: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusUnauthorized)
+					json.NewEncoder(w).Encode(ErrorResponse{Code: -3, Message: "Unauthorized"})
+				}))
+			},
+			assert: func(t *testing.T, resp *CreateTransactionResponse, statusCode int, err error) {
+				assert.Error(t, err)
+				assert.Equal(t, http.StatusUnauthorized, statusCode)
+				assert.Nil(t, resp)
+				assert.Contains(t, err.Error(), "Unauthorized")
+
+				var fbErr ErrorResponse
+				assert.True(t, errors.As(err, &fbErr))
+				assert.Equal(t, -3, fbErr.Code)
+			},
+		},
+		{
+			name: "network_error",
+			request: CreateTransactionRequest{
+				Operation: "TRANSFER",
+				AssetID:   "BTC_TEST",
+				Source: TransactionSource{
+					Type: "VAULT_ACCOUNT",
+					ID:   "123",
+				},
+				Destination: TransactionDestination{
+					Type: "ONE_TIME_ADDRESS",
+					OneTimeAddress: OneTimeAddress{
+						Address: "tb1qerzrlxcfu24davlur5sqmgzzgsal6wusda40er",
+					},
+				},
+				Amount: "0.0000001",
+			},
+			mockSetup: func() *httptest.Server {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+				server.Close()
+				return server
+			},
+			assert: func(t *testing.T, resp *CreateTransactionResponse, statusCode int, err error) {
+				assert.Error(t, err)
+				assert.Equal(t, 0, statusCode)
+				assert.Nil(t, resp)
+				assert.Contains(t, err.Error(), "connection refused")
+			},
+		},
+		{
+			name: "unexpected_error_format",
+			request: CreateTransactionRequest{
+				Operation: "TRANSFER",
+				AssetID:   "BTC_TEST",
+				Source: TransactionSource{
+					Type: "VAULT_ACCOUNT",
+					ID:   "123",
+				},
+				Destination: TransactionDestination{
+					Type: "ONE_TIME_ADDRESS",
+					OneTimeAddress: OneTimeAddress{
+						Address: "tb1qerzrlxcfu24davlur5sqmgzzgsal6wusda40er",
+					},
+				},
+				Amount: "0.0000001",
+			},
+			mockSetup: func() *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusInternalServerError)
+					w.Write([]byte("<html><body>Internal Server Error</body></html>"))
+				}))
+			},
+			assert: func(t *testing.T, resp *CreateTransactionResponse, statusCode int, err error) {
+				assert.Error(t, err)
+				assert.Equal(t, http.StatusInternalServerError, statusCode)
+				assert.Nil(t, resp)
+				assert.Contains(t, err.Error(), "unexpected API response")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := tt.mockSetup()
+			defer server.Close()
+
+			testPrivateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+			assert.NoError(t, err)
+
+			client := NewClient(server.URL, "test-api-key", testPrivateKey)
+			resp, statusCode, err := client.CreateTransaction(tt.request)
+
+			tt.assert(t, resp, statusCode, err)
+		})
+	}
+}
