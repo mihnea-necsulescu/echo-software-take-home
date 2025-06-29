@@ -3,7 +3,6 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"firego-wallet-service/internal/fireblocks"
 	"firego-wallet-service/internal/model"
 	"github.com/stretchr/testify/assert"
@@ -46,8 +45,9 @@ func (m *MockWalletRepository) GetByID(_ string) (*model.Wallet, error) {
 }
 
 type MockFireblocksClient struct {
-	CreateVaultAccountResponse          *fireblocks.CreateVaultAccountResponse
-	GetVaultAccountAssetBalanceResponse *fireblocks.GetVaultAccountAssetBalanceResponse
+	CreateVaultAccountResponse            *fireblocks.CreateVaultAccountResponse
+	GetVaultAccountAssetBalanceResponse   *fireblocks.GetVaultAccountAssetBalanceResponse
+	GetVaultAccountAssetAddressesResponse *fireblocks.GetVaultAccountAssetAddressesResponse
 
 	StatusCode int
 	Error      error
@@ -61,8 +61,8 @@ func (m *MockFireblocksClient) GetVaultAccountAssetBalance(_, _ string) (*firebl
 	return m.GetVaultAccountAssetBalanceResponse, m.StatusCode, m.Error
 }
 
-func (m *MockFireblocksClient) GetVaultAccountAssetAddresses(vaultAccountID, assetID string) (*fireblocks.GetVaultAccountAssetAddressesResponse, int, error) {
-	return nil, 0, nil //todo
+func (m *MockFireblocksClient) GetVaultAccountAssetAddresses(_, _ string) (*fireblocks.GetVaultAccountAssetAddressesResponse, int, error) {
+	return m.GetVaultAccountAssetAddressesResponse, m.StatusCode, m.Error
 }
 
 func (m *MockFireblocksClient) CreateTransaction(_ fireblocks.CreateTransactionRequest) (*fireblocks.CreateTransactionResponse, int, error) {
@@ -258,11 +258,7 @@ func TestGetWalletBalance(t *testing.T) {
 		{
 			name: "database_error",
 			mockSetup: func() (WalletRepository, FireblocksClient) {
-				mockRepo := &MockWalletRepository{
-					GetByIDWallet: nil,
-					GetByIDError:  errors.New("database connection failed"),
-				}
-				return mockRepo, nil
+				return &MockWalletRepository{GetByIDError: assert.AnError}, nil
 			},
 			url: "/wallets/123/assets/BTC_TEST/balance",
 			assert: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -351,6 +347,211 @@ func TestGetWalletBalance(t *testing.T) {
 
 			mux := http.NewServeMux()
 			mux.HandleFunc("GET /wallets/{walletId}/assets/{assetId}/balance", handler.GetWalletBalance)
+
+			req := httptest.NewRequest(http.MethodGet, tt.url, nil)
+			recorder := httptest.NewRecorder()
+
+			mux.ServeHTTP(recorder, req)
+
+			tt.assert(t, recorder)
+		})
+	}
+}
+
+func TestGetDepositAddress(t *testing.T) {
+	tests := []struct {
+		name      string
+		mockSetup func() (WalletRepository, FireblocksClient)
+		url       string
+		assert    func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name: "success",
+			mockSetup: func() (WalletRepository, FireblocksClient) {
+				mockRepo := &MockWalletRepository{
+					GetByIDWallet: &model.Wallet{
+						ID:             "123",
+						Name:           "Test",
+						VaultAccountID: "vault-account-id",
+					},
+					GetByIDError: nil,
+				}
+				mockFireblocksClient := &MockFireblocksClient{
+					GetVaultAccountAssetAddressesResponse: &fireblocks.GetVaultAccountAssetAddressesResponse{
+						Addresses: []fireblocks.VaultAccountAddress{
+							{
+								AssetID:           "BTC_TEST",
+								Address:           "tb1q24jg2svw7430u3slcp0rlml7u2tse3h53q0jwe",
+								Description:       "",
+								Tag:               "",
+								Type:              "Permanent",
+								AddressFormat:     "SEGWIT",
+								LegacyAddress:     "moJU9ea6HdEqMWsyGc892AxiArv2Jyfk7d",
+								EnterpriseAddress: "",
+								Bip44AddressIndex: 0,
+								UserDefined:       false,
+							},
+							{
+								AssetID:       "BTC_TEST",
+								Address:       "moJU9ea6HdEqMWsyGc892AxiArv2Jyfk7d",
+								Type:          "Permanent",
+								AddressFormat: "LEGACY",
+							},
+						},
+					},
+					StatusCode: http.StatusOK,
+					Error:      nil,
+				}
+				return mockRepo, mockFireblocksClient
+			},
+			url: "/wallets/123/assets/BTC_TEST/address",
+			assert: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusOK, recorder.Code)
+				assert.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
+
+				var response GetDepositAddressResponse
+				err := json.NewDecoder(recorder.Body).Decode(&response)
+				assert.NoError(t, err)
+
+				assert.Equal(t, "BTC_TEST", response.AssetID)
+				assert.Equal(t, "tb1q24jg2svw7430u3slcp0rlml7u2tse3h53q0jwe", response.Address)
+				assert.Equal(t, "SEGWIT", response.AddressFormat)
+				assert.Equal(t, "Permanent", response.Type)
+			},
+		},
+		{
+			name: "wallet_not_found",
+			mockSetup: func() (WalletRepository, FireblocksClient) {
+				mockRepo := &MockWalletRepository{
+					GetByIDWallet: nil,
+					GetByIDError:  gorm.ErrRecordNotFound,
+				}
+				return mockRepo, nil
+			},
+			url: "/wallets/nonexistent-wallet/assets/BTC_TEST/address",
+			assert: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusNotFound, recorder.Code)
+				assert.Contains(t, recorder.Body.String(), "Wallet not found")
+			},
+		},
+		{
+			name: "database_error",
+			mockSetup: func() (WalletRepository, FireblocksClient) {
+				return &MockWalletRepository{GetByIDError: assert.AnError}, nil
+			},
+			url: "/wallets/123/assets/BTC_TEST/address",
+			assert: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusInternalServerError, recorder.Code)
+				assert.Contains(t, recorder.Body.String(), "Internal server error")
+			},
+		},
+		{
+			name: "no_addresses_available",
+			mockSetup: func() (WalletRepository, FireblocksClient) {
+				mockRepo := &MockWalletRepository{
+					GetByIDWallet: &model.Wallet{
+						ID:             "123",
+						Name:           "Test",
+						VaultAccountID: "vault-account-id",
+					},
+					GetByIDError: nil,
+				}
+				mockFireblocksClient := &MockFireblocksClient{
+					GetVaultAccountAssetAddressesResponse: &fireblocks.GetVaultAccountAssetAddressesResponse{
+						Addresses: []fireblocks.VaultAccountAddress{},
+					},
+					StatusCode: http.StatusOK,
+					Error:      nil,
+				}
+				return mockRepo, mockFireblocksClient
+			},
+			url: "/wallets/wallet-123/assets/BTC_TEST/address",
+			assert: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusNotFound, recorder.Code)
+				assert.Contains(t, recorder.Body.String(), "No deposit address available")
+			},
+		},
+		{
+			name: "fireblocks_asset_not_found",
+			mockSetup: func() (WalletRepository, FireblocksClient) {
+				mockRepo := &MockWalletRepository{
+					GetByIDWallet: &model.Wallet{
+						ID:             "123",
+						Name:           "Test",
+						VaultAccountID: "vault-account-id",
+					},
+					GetByIDError: nil,
+				}
+				mockFireblocksClient := &MockFireblocksClient{
+					GetVaultAccountAssetAddressesResponse: nil,
+					StatusCode:                            http.StatusNotFound,
+					Error:                                 fireblocks.ErrorResponse{Code: 1006, Message: "Not found"},
+				}
+				return mockRepo, mockFireblocksClient
+			},
+			url: "/wallets/123/assets/INVALID_ASSET/address",
+			assert: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusBadRequest, recorder.Code)
+				assert.Contains(t, recorder.Body.String(), "Invalid request")
+			},
+		},
+		{
+			name: "fireblocks_unauthorized",
+			mockSetup: func() (WalletRepository, FireblocksClient) {
+				mockRepo := &MockWalletRepository{
+					GetByIDWallet: &model.Wallet{
+						ID:             "123",
+						Name:           "Test",
+						VaultAccountID: "vault-account-id",
+					},
+					GetByIDError: nil,
+				}
+				mockFireblocksClient := &MockFireblocksClient{
+					GetVaultAccountAssetAddressesResponse: nil,
+					StatusCode:                            http.StatusUnauthorized,
+					Error:                                 fireblocks.ErrorResponse{Code: -3, Message: "Unauthorized"},
+				}
+				return mockRepo, mockFireblocksClient
+			},
+			url: "/wallets/123/assets/BTC_TEST/address",
+			assert: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusBadRequest, recorder.Code)
+				assert.Contains(t, recorder.Body.String(), "Invalid request")
+			},
+		},
+		{
+			name: "fireblocks_server_error",
+			mockSetup: func() (WalletRepository, FireblocksClient) {
+				mockRepo := &MockWalletRepository{
+					GetByIDWallet: &model.Wallet{
+						ID:             "123",
+						Name:           "Test",
+						VaultAccountID: "vault-account-id",
+					},
+					GetByIDError: nil,
+				}
+				mockFireblocksClient := &MockFireblocksClient{
+					GetVaultAccountAssetAddressesResponse: nil,
+					StatusCode:                            http.StatusInternalServerError,
+					Error:                                 fireblocks.ErrorResponse{Code: 1000, Message: "Internal server error"},
+				}
+				return mockRepo, mockFireblocksClient
+			},
+			url: "/wallets/123/assets/BTC_TEST/address",
+			assert: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				assert.Equal(t, http.StatusInternalServerError, recorder.Code)
+				assert.Contains(t, recorder.Body.String(), "Service unavailable")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo, mockClient := tt.mockSetup()
+			handler := NewWalletHandler(mockRepo, mockClient)
+
+			mux := http.NewServeMux()
+			mux.HandleFunc("GET /wallets/{walletId}/assets/{assetId}/address", handler.GetDepositAddress)
 
 			req := httptest.NewRequest(http.MethodGet, tt.url, nil)
 			recorder := httptest.NewRecorder()

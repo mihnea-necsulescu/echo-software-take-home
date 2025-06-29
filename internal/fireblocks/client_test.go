@@ -264,3 +264,186 @@ func TestGetVaultAccountBalanceAsset(t *testing.T) {
 		})
 	}
 }
+
+func TestGetVaultAccountAssetAddresses(t *testing.T) {
+	tests := []struct {
+		name           string
+		vaultAccountID string
+		assetID        string
+		mockSetup      func(vaultAccountID, assetID string) *httptest.Server
+		assert         func(t *testing.T, resp *GetVaultAccountAssetAddressesResponse, statusCode int, err error)
+	}{
+		{
+			name:           "success",
+			vaultAccountID: "123",
+			assetID:        "BTC_TEST",
+			mockSetup: func(vaultAccountID, assetID string) *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					assert.Equal(t, http.MethodGet, r.Method)
+					assert.Equal(t, fmt.Sprintf("/v1/vault/accounts/%s/%s/addresses_paginated", vaultAccountID, assetID), r.URL.Path)
+					assert.NotEmpty(t, r.Header.Get("X-API-Key"))
+					assert.NotEmpty(t, r.Header.Get("Authorization"))
+
+					w.WriteHeader(http.StatusOK)
+					json.NewEncoder(w).Encode(GetVaultAccountAssetAddressesResponse{
+						Addresses: []VaultAccountAddress{
+							{
+								AssetID:           "BTC_TEST",
+								Address:           "tb1q24jg2svw7430u3slcp0rlml7u2tse3h53q0jwe",
+								Description:       "",
+								Tag:               "",
+								Type:              "Permanent",
+								AddressFormat:     "SEGWIT",
+								LegacyAddress:     "moJU9ea6HdEqMWsyGc892AxiArv2Jyfk7d",
+								EnterpriseAddress: "",
+								Bip44AddressIndex: 0,
+								UserDefined:       false,
+							},
+							{
+								AssetID:           "BTC_TEST",
+								Address:           "moJU9ea6HdEqMWsyGc892AxiArv2Jyfk7d",
+								Description:       "",
+								Tag:               "",
+								Type:              "Permanent",
+								AddressFormat:     "LEGACY",
+								LegacyAddress:     "",
+								EnterpriseAddress: "",
+								Bip44AddressIndex: 0,
+								UserDefined:       false,
+							},
+						},
+					})
+				}))
+			},
+			assert: func(t *testing.T, resp *GetVaultAccountAssetAddressesResponse, statusCode int, err error) {
+				assert.NoError(t, err)
+				assert.Equal(t, http.StatusOK, statusCode)
+				assert.NotNil(t, resp)
+				assert.Len(t, resp.Addresses, 2)
+
+				firstAddr := resp.Addresses[0]
+				assert.Equal(t, "BTC_TEST", firstAddr.AssetID)
+				assert.Equal(t, "tb1q24jg2svw7430u3slcp0rlml7u2tse3h53q0jwe", firstAddr.Address)
+				assert.Equal(t, "SEGWIT", firstAddr.AddressFormat)
+				assert.Equal(t, "Permanent", firstAddr.Type)
+				assert.False(t, firstAddr.UserDefined)
+
+				secondAddr := resp.Addresses[1]
+				assert.Equal(t, "LEGACY", secondAddr.AddressFormat)
+				assert.Equal(t, "moJU9ea6HdEqMWsyGc892AxiArv2Jyfk7d", secondAddr.Address)
+			},
+		},
+		{
+			name:           "asset_not_found",
+			vaultAccountID: "123",
+			assetID:        "INVALID_ASSET",
+			mockSetup: func(vaultAccountID, assetID string) *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					assert.Equal(t, http.MethodGet, r.Method)
+					assert.Equal(t, fmt.Sprintf("/v1/vault/accounts/%s/%s/addresses_paginated", vaultAccountID, assetID), r.URL.Path)
+
+					w.WriteHeader(http.StatusNotFound)
+					json.NewEncoder(w).Encode(ErrorResponse{Code: 1006, Message: "Not found"})
+				}))
+			},
+			assert: func(t *testing.T, resp *GetVaultAccountAssetAddressesResponse, statusCode int, err error) {
+				assert.Error(t, err)
+				assert.Equal(t, http.StatusNotFound, statusCode)
+				assert.Nil(t, resp)
+				assert.Contains(t, err.Error(), "Not found")
+
+				var fbErr ErrorResponse
+				assert.True(t, errors.As(err, &fbErr))
+				assert.Equal(t, 1006, fbErr.Code)
+				assert.Equal(t, "Not found", fbErr.Message)
+			},
+		},
+		{
+			name:           "invalid_vault_account",
+			vaultAccountID: "invalid-vault",
+			assetID:        "BTC_TEST",
+			mockSetup: func(vaultAccountID, assetID string) *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					assert.Equal(t, http.MethodGet, r.Method)
+					assert.Equal(t, fmt.Sprintf("/v1/vault/accounts/%s/%s/addresses_paginated", vaultAccountID, assetID), r.URL.Path)
+
+					w.WriteHeader(http.StatusBadRequest)
+					json.NewEncoder(w).Encode(ErrorResponse{Code: 11001, Message: "The Provided Vault Account ID is invalid: invalid-vault"})
+				}))
+			},
+			assert: func(t *testing.T, resp *GetVaultAccountAssetAddressesResponse, statusCode int, err error) {
+				assert.Error(t, err)
+				assert.Equal(t, http.StatusBadRequest, statusCode)
+				assert.Nil(t, resp)
+				assert.Contains(t, err.Error(), "The Provided Vault Account ID is invalid")
+
+				var fbErr ErrorResponse
+				assert.True(t, errors.As(err, &fbErr))
+				assert.Equal(t, 11001, fbErr.Code)
+			},
+		},
+		{
+			name: "fireblocks_error_unauthorized",
+			mockSetup: func(vaultAccountID, assetID string) *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusUnauthorized)
+					json.NewEncoder(w).Encode(ErrorResponse{Code: -3, Message: "Unauthorized"})
+				}))
+			},
+			assert: func(t *testing.T, resp *GetVaultAccountAssetAddressesResponse, statusCode int, err error) {
+				assert.Error(t, err)
+				assert.Equal(t, http.StatusUnauthorized, statusCode)
+				assert.Nil(t, resp)
+				assert.Contains(t, err.Error(), "Unauthorized")
+
+				var fbErr ErrorResponse
+				assert.True(t, errors.As(err, &fbErr))
+				assert.Equal(t, -3, fbErr.Code)
+			},
+		},
+		{
+			name: "network_error",
+			mockSetup: func(vaultAccountID, assetID string) *httptest.Server {
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+				server.Close()
+				return server
+			},
+			assert: func(t *testing.T, resp *GetVaultAccountAssetAddressesResponse, statusCode int, err error) {
+				assert.Error(t, err)
+				assert.Equal(t, 0, statusCode)
+				assert.Nil(t, resp)
+				assert.Contains(t, err.Error(), "connection refused")
+			},
+		},
+		{
+			name: "unexpected_error_format",
+			mockSetup: func(vaultAccountID, assetID string) *httptest.Server {
+				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(http.StatusInternalServerError)
+					w.Write([]byte("<html><body>Internal Server Error</body></html>"))
+				}))
+			},
+			assert: func(t *testing.T, resp *GetVaultAccountAssetAddressesResponse, statusCode int, err error) {
+				assert.Error(t, err)
+				assert.Equal(t, http.StatusInternalServerError, statusCode)
+				assert.Nil(t, resp)
+				assert.Contains(t, err.Error(), "unexpected API response")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := tt.mockSetup(tt.vaultAccountID, tt.assetID)
+			defer server.Close()
+
+			testPrivateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+			assert.NoError(t, err)
+
+			client := NewClient(server.URL, "test-api-key", testPrivateKey)
+			resp, statusCode, err := client.GetVaultAccountAssetAddresses(tt.vaultAccountID, tt.assetID)
+
+			tt.assert(t, resp, statusCode, err)
+		})
+	}
+}
