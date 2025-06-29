@@ -1,0 +1,141 @@
+{
+	"info": {
+		"_postman_id": "ddafd936-a998-4aed-b16e-040b6972b1cc",
+		"name": "FireGo Wallet",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "2115730"
+	},
+	"item": [
+		{
+			"name": "Create wallet",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"name\": \"<string>\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "localhost:8080/wallets",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"wallets"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Wallet Balance",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "localhost:8080/wallets/:walletId/assets/:assetId/balance",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"wallets",
+						":walletId",
+						"assets",
+						":assetId",
+						"balance"
+					],
+					"variable": [
+						{
+							"key": "walletId",
+							"value": "",
+							"description": "ID returned from the Create Wallet operation, or any other local ID saved In the DB"
+						},
+						{
+							"key": "assetId",
+							"value": "",
+							"description": "Desired asset ID for which the balance has to be checked (e.g. BTC_TEST)"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Deposit Address",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "localhost:8080/wallets/:walletId/assets/:assetId/address",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"wallets",
+						":walletId",
+						"assets",
+						":assetId",
+						"address"
+					],
+					"variable": [
+						{
+							"key": "walletId",
+							"value": "",
+							"description": "ID returned from the Create Wallet operation, or any other local ID saved In the DB"
+						},
+						{
+							"key": "assetId",
+							"value": "",
+							"description": "Desired asset ID whose address we're interested in (e.g. BTC_TEST)"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "New Request",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"assetId\": \"BTC_TEST\",\n  \"amount\": \"0.0000001\",\n  \"destinationAddress\": \"tb1qlj64u6fqutr0xue85kl55fx0gt4m4urun25p7q\",\n  \"note\": \"Test transfer\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "localhost:8080/wallets/:walletId/transactions",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"wallets",
+						":walletId",
+						"transactions"
+					],
+					"variable": [
+						{
+							"key": "walletId",
+							"value": "",
+							"description": "ID of the source wallet"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
