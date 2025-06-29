@@ -65,6 +65,10 @@ func (m *MockFireblocksClient) GetVaultAccountAssetAddresses(vaultAccountID, ass
 	return nil, 0, nil //todo
 }
 
+func (m *MockFireblocksClient) CreateTransaction(_ fireblocks.CreateTransactionRequest) (*fireblocks.CreateTransactionResponse, int, error) {
+	return nil, 0, nil // todo
+}
+
 func TestCreateWallet(t *testing.T) {
 	tests := []struct {
 		name      string

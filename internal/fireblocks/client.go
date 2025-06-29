@@ -102,6 +102,49 @@ func (c *Client) GetVaultAccountAssetAddresses(vaultAccountID, assetID string) (
 	return nil, statusCode, fmt.Errorf("unexpected API response: %s", string(respBytes))
 }
 
+func (c *Client) CreateTransaction(req CreateTransactionRequest) (*CreateTransactionResponse, int, error) {
+	path := "/v1/transactions"
+
+	respBytes, statusCode, err := c.makeAPIRequest("POST", path, req)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if statusCode == http.StatusOK {
+		var response CreateTransactionResponse
+		if err = json.Unmarshal(respBytes, &response); err != nil {
+			return nil, statusCode, fmt.Errorf("failed to parse response: %w", err)
+		}
+		return &response, statusCode, nil
+	}
+
+	var fbError ErrorResponse
+	if err = json.Unmarshal(respBytes, &fbError); err == nil {
+		return nil, statusCode, fbError
+	}
+
+	return nil, statusCode, fmt.Errorf("unexpected API response: %s", string(respBytes))
+}
+
+func NewVaultTransferRequest(assetID, vaultAccountID, destinationAddress, amount, note string) CreateTransactionRequest {
+	return CreateTransactionRequest{
+		Operation: "TRANSFER",
+		AssetID:   assetID,
+		Source: TransactionSource{
+			Type: "VAULT_ACCOUNT",
+			ID:   vaultAccountID,
+		},
+		Destination: TransactionDestination{
+			Type: "ONE_TIME_ADDRESS",
+			OneTimeAddress: OneTimeAddress{
+				Address: destinationAddress,
+			},
+		},
+		Amount: amount,
+		Note:   note,
+	}
+}
+
 // GetAccountsPaged is used for testing only
 func (c *Client) GetAccountsPaged() ([]byte, error) {
 	path := "/v1/vault/accounts_paged"

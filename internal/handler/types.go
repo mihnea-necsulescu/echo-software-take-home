@@ -27,3 +27,19 @@ type GetDepositAddressResponse struct {
 	AddressFormat string `json:"addressFormat"`
 	Type          string `json:"type"`
 }
+
+type InitiateTransferRequest struct {
+	AssetID            string `json:"assetId"`
+	Amount             string `json:"amount"`
+	DestinationAddress string `json:"destinationAddress"`
+	Note               string `json:"note,omitempty"`
+}
+
+type InitiateTransferResponse struct {
+	TransactionID      string `json:"transactionId"`
+	Status             string `json:"status"`
+	AssetID            string `json:"assetId"`
+	Amount             string `json:"amount"`
+	DestinationAddress string `json:"destinationAddress"`
+	Note               string `json:"note,omitempty"`
+}

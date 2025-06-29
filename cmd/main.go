@@ -74,6 +74,7 @@ func main() {
 	mux.HandleFunc("POST /wallets", walletHandler.CreateWallet)
 	mux.HandleFunc("GET /wallets/{walletId}/assets/{assetId}/balance", walletHandler.GetWalletBalance)
 	mux.HandleFunc("GET /wallets/{walletId}/assets/{assetId}/address", walletHandler.GetDepositAddress)
+	mux.HandleFunc("POST /wallets/{walletId}/transactions", walletHandler.InitiateTransfer)
 
 	log.Printf("Listening on port %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
